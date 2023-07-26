@@ -1,0 +1,302 @@
+C51 COMPILER V9.57.0.0   FOOTBALL                                                          06/17/2022 11:21:39 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE FOOTBALL
+OBJECT MODULE PLACED IN .\Objects\football.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE football.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\
+                    -football.lst) TABS(2) OBJECT(.\Objects\football.obj)
+
+line level    source
+
+   1          #include "reg52.h"       //此文件中定义了单片机的一些特殊功能寄存器
+   2          
+   3          typedef unsigned int u16;   //对数据类型进行声明定义
+   4          typedef unsigned char u8;
+   5          
+   6          sbit LSA=P2^0;
+   7          sbit LSB=P2^1;//常规时间显示控制引脚
+   8          
+   9          sbit LSC=P2^2;
+  10          sbit LSD=P2^3;
+  11          sbit LSE=P2^4;//比分，伤停补时显示控制引脚
+  12          
+  13          sbit bee=P2^5;//结束哨音引脚
+  14          
+  15          sbit A_add=P3^0;
+  16          sbit B_add=P3^1;//比分增加按钮
+  17          
+  18          sbit A_sub=P3^2;
+  19          sbit B_sub=P3^3;//比分减少按钮
+  20          
+  21          sbit change = P3^4; // 换场地按钮
+  22          
+  23          sbit T_add=P3^5;
+  24          sbit S_add=P3^6;//补时增加，分秒按钮
+  25          
+  26          u8 Formal_timer[4];//常规时间数组
+  27          u8 Score_Uptime[8];//进球数，补时数组
+  28          
+  29          u8 code smgduan[11]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f,0x77};//显示0~9的值
+  30          
+  31          u16 ssec,sec=55,min=89,x=0,y=0,k;
+  32          
+  33          u16 osec=0,omin=0,flag=0;
+  34          
+  35          void keyScan();
+  36          
+  37          void delay(u16 i)
+  38          {
+  39   1        while(i--); 
+  40   1      }
+  41          
+  42          void Timer0Init()//定时器0设置
+  43          {
+  44   1        TMOD|=0X01;//选择为定时器0模式，工作方式1，仅用TR0打开启动。
+  45   1        TH0=0Xd8; //给定时器赋初值，定时10ms
+  46   1        TL0=0Xf0; 
+  47   1        ET0=1;//打开定时器0中断允许
+  48   1        EA=1;//打开总中断
+  49   1        TR0=1;//打开定时器      
+  50   1      }
+  51          
+  52          void Timer1Init()//定时器1设置
+  53          {
+  54   1        TMOD|=0X10;//选择为定时器1模式，工作方式1，仅用TR1打开启动。
+C51 COMPILER V9.57.0.0   FOOTBALL                                                          06/17/2022 11:21:39 PAGE 2   
+
+  55   1        TH1=0Xd8; //给定时器赋初值，定时10ms
+  56   1        TL1=0Xf0; 
+  57   1        ET1=1;//打开定时器0中断允许
+  58   1        EA=1;//打开总中断
+  59   1        TR1=1;//打开定时器      
+  60   1      }
+  61          
+  62          void formal_time()//常规时间显示
+  63          {
+  64   1        u8 i;
+  65   1        for(i=0;i<4;i++)
+  66   1        {
+  67   2          switch(i)
+  68   2          {
+  69   3            case(0):
+  70   3              LSA=0;LSB=0;break;
+  71   3            case(1):
+  72   3              LSA=1;LSB=0;break;
+  73   3            case(2):
+  74   3              LSA=0;LSB=1;break;
+  75   3            case(3):
+  76   3              LSA=1;LSB=1;break;
+  77   3          }
+  78   2          P0=Formal_timer[i];//发送段码
+  79   2          delay(100); //间隔一段时间扫描  
+  80   2          P0=0x00;//消隐
+  81   2        }
+  82   1      }
+  83          void time_element()//常规时间数组
+  84            {
+  85   1        Formal_timer[0]=smgduan[sec%10];
+  86   1        Formal_timer[1]=smgduan[sec/10];
+  87   1        Formal_timer[2]=smgduan[min%10];
+  88   1        Formal_timer[3]=smgduan[min/10];
+  89   1        }
+  90          void score_utime()//比分，伤停补时显示
+  91          {
+  92   1        u8 i;
+  93   1        for(i=0;i<8;i++)
+  94   1        {
+  95   2          switch(i)  //位选，选择点亮的数码管，
+  96   2          {
+  97   3            case(0):
+  98   3              LSC=0;LSD=0;LSE=0; break;//显示第0位
+  99   3            case(1):
+ 100   3              LSC=1;LSD=0;LSE=0; break;//显示第1位
+ 101   3            case(2):
+ 102   3              LSC=0;LSD=1;LSE=0; break;//显示第2位
+ 103   3            case(3):
+ 104   3              LSC=1;LSD=1;LSE=0; break;//显示第3位
+ 105   3            case(4):
+ 106   3              LSC=0;LSD=0;LSE=1; break;//显示第4位
+ 107   3            case(5):
+ 108   3              LSC=1;LSD=0;LSE=1; break;//显示第5位
+ 109   3            case(6):
+ 110   3              LSC=0;LSD=1;LSE=1; break;//显示第6位
+ 111   3            case(7):
+ 112   3              LSC=1;LSD=1;LSE=1; break;//显示第7位  
+ 113   3          }
+ 114   2          P1=Score_Uptime[i];//发送段码
+ 115   2          delay(100); //间隔一段时间扫描  
+ 116   2          P1=0x00;//消隐
+C51 COMPILER V9.57.0.0   FOOTBALL                                                          06/17/2022 11:21:39 PAGE 3   
+
+ 117   2        }
+ 118   1      }
+ 119          void score_element()//比分，伤停补时数组
+ 120            {
+ 121   1        Score_Uptime[0]=smgduan[x%10];
+ 122   1        Score_Uptime[1]=smgduan[x/10];
+ 123   1        Score_Uptime[2]=smgduan[y%10];
+ 124   1        Score_Uptime[3]=smgduan[y/10];
+ 125   1        Score_Uptime[4]=smgduan[osec%10];
+ 126   1        Score_Uptime[5]=smgduan[osec/10];
+ 127   1        Score_Uptime[6]=smgduan[omin%10];
+ 128   1        Score_Uptime[7]=smgduan[omin/10];
+ 129   1        }
+ 130            
+ 131          void main()//主函数
+ 132          { 
+ 133   1        
+ 134   1        Timer0Init();  //定时器0初始化
+ 135   1        P3=0xff;
+ 136   1        while(1)
+ 137   1        {
+ 138   2          time_element();
+ 139   2          formal_time();
+ 140   2          keyScan();
+ 141   2          score_element();
+ 142   2          score_utime();
+ 143   2          if(min>89)//常规时间结束，关闭定时器0
+ 144   2          {
+ 145   3            ET0=0;
+ 146   3            TR0=0;
+ 147   3            EA=0;
+ 148   3            break;
+ 149   3          }
+ 150   2        }
+ 151   1        min=sec=ssec=0; 
+ 152   1        Timer1Init();
+ 153   1        while(1)//进行伤停补时
+ 154   1        {
+ 155   2          time_element();
+ 156   2          formal_time();
+ 157   2          keyScan();
+ 158   2          score_element();
+ 159   2          score_utime();
+ 160   2          if(flag)//伤停补时结束标志位
+ 161   2          {
+ 162   3            break;
+ 163   3          }
+ 164   2        }
+ 165   1        while(1)//结束时候的哨音
+ 166   1        {
+ 167   2          EA=0;
+ 168   2          for(k=2000;k>0;k--)
+ 169   2          {
+ 170   3          bee=~bee;
+ 171   3          delay(100);
+ 172   3          }
+ 173   2          break;
+ 174   2        }
+ 175   1        min=90+omin;
+ 176   1        sec=osec;
+ 177   1        
+ 178   1        while(1)//最终比分显示
+C51 COMPILER V9.57.0.0   FOOTBALL                                                          06/17/2022 11:21:39 PAGE 4   
+
+ 179   1        {     
+ 180   2          time_element();
+ 181   2          formal_time();
+ 182   2          score_element();
+ 183   2          score_utime();
+ 184   2        }
+ 185   1      }
+ 186          
+ 187          
+ 188          void Timer0() interrupt 1
+ 189          {
+ 190   1        TH0=0Xd8; //给定时器赋初值，定时10ms
+ 191   1        TL0=0Xf0;
+ 192   1        ssec++;
+ 193   1        if(ssec>=100)  //1s
+ 194   1        {
+ 195   2          ssec=0;
+ 196   2          sec++;
+ 197   2          if(sec>=60)
+ 198   2          {
+ 199   3            sec=0;
+ 200   3            min++;
+ 201   3          } 
+ 202   2        } 
+ 203   1      }
+ 204          void Timer1() interrupt 3
+ 205          {
+ 206   1        TH1=0Xd8; //给定时器赋初值，定时10ms
+ 207   1        TL1=0Xf0;
+ 208   1        ssec++;
+ 209   1        if(ssec>=100)  //1s
+ 210   1        {
+ 211   2          ssec=0;
+ 212   2          sec++;
+ 213   2          if(sec>=60)
+ 214   2          {
+ 215   3            sec=0;
+ 216   3            min++;
+ 217   3          } 
+ 218   2        }
+ 219   1          if(sec==osec&&min==omin)
+ 220   1        {
+ 221   2          flag=1;
+ 222   2          TR1=0;
+ 223   2          EA=0;
+ 224   2          ET1=0;
+ 225   2        }
+ 226   1      }
+ 227          void keyScan() //按键扫描函数
+ 228          {
+ 229   1        u16 temp;//中间变量 temp， 检测到有按键按下时交换 A,B 两队分数
+ 230   1        if(A_add==0)//当检测到 A 队加分按键按下， 对应加分
+ 231   1        {
+ 232   2              x++;
+ 233   2        }
+ 234   1        if(B_add==0)
+ 235   1        {
+ 236   2              y++;
+ 237   2        }
+ 238   1        if(A_sub==0)
+ 239   1        { 
+ 240   2            if(x>=1) x--;
+C51 COMPILER V9.57.0.0   FOOTBALL                                                          06/17/2022 11:21:39 PAGE 5   
+
+ 241   2        }
+ 242   1        if(B_sub==0)
+ 243   1        {
+ 244   2            if(y>=1)y--;
+ 245   2        }
+ 246   1        if(T_add==0)
+ 247   1        {
+ 248   2          omin++;
+ 249   2        }
+ 250   1        if(S_add==0)
+ 251   1        {
+ 252   2          osec+=30;
+ 253   2        }
+ 254   1        if(change==0) //交换场地
+ 255   1          {
+ 256   2            temp=x; //两个分数值对调
+ 257   2            x=y;
+ 258   2            y=temp;
+ 259   2          }
+ 260   1          if(osec>59)
+ 261   1        {
+ 262   2          omin=omin+osec/60;
+ 263   2          osec=osec%60;
+ 264   2        }
+ 265   1          while(A_add ==0 || B_add ==0 || A_sub ==0 || B_sub==0 || change==0|| T_add==0|| S_add==0)
+ 266   1        {
+ 267   2          score_element(); //等待按钮被松开
+ 268   2        }
+ 269   1      }
+ 270          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    992    ----
+   CONSTANT SIZE    =     11    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     30    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
